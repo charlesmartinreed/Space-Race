@@ -6,6 +6,7 @@
 //  Copyright © 2018 Charles Martin Reed. All rights reserved.
 //
 
+import GameplayKit
 import SpriteKit
 
 class GameScene: SKScene, SKPhysicsContactDelegate {
@@ -22,6 +23,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             scoreLabel.text = "Score: \(score)"
         }
     }
+    
+    //MARK:- GAME LOGIC PROPERTIES
+    var possibleEnemies = ["ball", "hammer", "tv"]
+    var gameTimer: Timer!
+    var isGameOver = false
+    var gameOverLabel: SKLabelNode!
     
     
     override func didMove(to view: SKView) {
@@ -60,12 +67,99 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         //this is called when two bodies collide, so we're saying that our view will handle this behavior
         physicsWorld.contactDelegate = self
+        
+        //Start the timer for creating enemies
+        gameTimer = Timer.scheduledTimer(timeInterval: 0.35, target: self, selector: #selector(createEnemy), userInfo: nil, repeats: true)
     }
     
-   
+    //MARK:- Collision detection and handling
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        //use the location in touches to figure out where the user touched
+        //restrict the player movement on the y axis to keep them in the game area
+        guard let touch = touches.first else { return }
+        var location = touch.location(in: self)
+        
+        if location.y < 100 {
+            location.y = 100
+        } else if location.y > 668 {
+            location.y = 668
+        }
+        
+        player.position = location
+    }
+    
+    //this is used to end the game is the user stops touching the screen, but I'm not sure how I feel about it!
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        isGameOver = true
+    }
+    
+    func didBegin(_ contact: SKPhysicsContact) {
+        //create a particle emitter, position where the player is at time of collision, add the explosion to the scene while removing the player
+        //set isGameOver to be true
+        let explosion = SKEmitterNode(fileNamed: "explosion")!
+        explosion.position = player.position
+        addChild(explosion)
+        
+        player.removeFromParent()
+        
+        isGameOver = true
+    }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
       
+    }
+    
+    //MARK:- Enemy creation and destruction
+    @objc func createEnemy() {
+        //shuffle the possibleEnemies array, create a sprite node using the first item in the array, position it off the right edge and at a random vertical position, add node to the scene
+        
+        possibleEnemies = GKRandomSource.sharedRandom().arrayByShufflingObjects(in: possibleEnemies) as! [String]
+        
+        //we're using this to generate a random Y position within a certain range, so to speak. This is inclusive.
+        let randomDistribution = GKRandomDistribution(lowestValue: 50, highestValue: 736)
+        
+        let sprite = SKSpriteNode(imageNamed: possibleEnemies[0])
+        
+        //if we didn't call .nextInt(), our number would randomize once and we'd be stuck with that value everytime we called createEnemy!
+        sprite.position = CGPoint(x: 1200, y: randomDistribution.nextInt())
+        addChild(sprite)
+        
+        //setting up the per-pixel collision
+        sprite.physicsBody = SKPhysicsBody(texture: sprite.texture!, size: sprite.size)
+        sprite.physicsBody?.categoryBitMask = 1
+        sprite.physicsBody?.velocity = CGVector(dx: -500, dy: 0)
+        sprite.physicsBody?.angularVelocity = 5
+        
+        //these values simulate the frictionless vacuum of space
+        sprite.physicsBody?.linearDamping = 0
+        sprite.physicsBody?.angularDamping = 0
+    }
+    
+    override func update(_ currentTime: TimeInterval) {
+        //if any node is beyond x position of -300, it is to be removed
+        //increment score if isGameOver is still false
+        //remember that this takes place EVERY FRAME
+        
+        for node in children {
+            if node.position.x < -300 {
+                node.removeFromParent()
+            }
+        }
+        
+        if !isGameOver {
+            score += 1
+        } else {
+            gameTimer.invalidate()
+            starfield.isPaused = true
+            //starfield.particleBirthRate = 0 stops the emitter from continuing, but this is a bit jarring
+            
+            gameOverLabel = SKLabelNode(fontNamed: "Chalkduster")
+            gameOverLabel.position = CGPoint(x: 512, y: 384)
+            gameOverLabel.text = "Game Over!"
+            gameOverLabel.fontColor = UIColor.red
+            gameOverLabel.fontSize = 48
+            addChild(gameOverLabel)
+        }
     }
     
 }
